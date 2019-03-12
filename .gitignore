@@ -10,3 +10,4 @@ _build_mpu/*
 *.cproject
 *.project
 *.settings/*
+.DS_Store

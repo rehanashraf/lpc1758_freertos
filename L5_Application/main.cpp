@@ -19,41 +19,49 @@
 /**
  * @file
  * @brief This is the application entry point.
- * 			FreeRTOS and stdio printf is pre-configured to use uart0_min.h before main() enters.
- * 			@see L0_LowLevel/lpc_sys.h if you wish to override printf/scanf functions.
+ *             FreeRTOS and stdio printf is pre-configured to use uart0_min.h before main() enters.
+ *             @see L0_LowLevel/lpc_sys.h if you wish to override printf/scanf functions.
  *
  */
-#include "tasks.hpp"
-#include "examples/examples.hpp"
 #include <stdio.h>
+#include "tasks.hpp"
 #include "utilities.h"
 #include "io.hpp"
+#include "ssp1.h"
+#include "SH1106.h"
 
+//#define SPI_
 
-/**
- * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
- * for details.  There is a very simple example towards the beginning of this class's declaration.
- *
- * @warning SPI #1 bus usage notes (interfaced to SD & Flash):
- *      - You can read/write files from multiple tasks because it automatically goes through SPI semaphore.
- *      - If you are going to use the SPI Bus in a FreeRTOS task, you need to use the API at L4_IO/fat/spi_sem.h
- *
- * @warning SPI #0 usage notes (Nordic wireless)
- *      - This bus is more tricky to use because if FreeRTOS is not running, the RIT interrupt may use the bus.
- *      - If FreeRTOS is running, then wireless task may use it.
- *        In either case, you should avoid using this bus or interfacing to external components because
- *        there is no semaphore configured for this bus and it should be used exclusively by nordic wireless.
- */
+#define min(a,b) ((a)<(b)?(a):(b))
+#define max(a,b) ((a)>(b)?(a):(b))
+#define delay_time 1000
+
+GPIO Reset(P1_19), DC(P1_20), CS(P1_22);
+SH1106 display(&DC, &Reset,&CS);
 
 inline bool CHECK_BIT(int var, int pos)
 {
     return (bool)(var & (1 << pos));
 }
 
-int main(void)
+void vTaskCode(void * pvParameters)
 {
+    char c = (char)((uint32_t)pvParameters);
+#ifdef SPI_
+    ssp1_init();
+    char a = 'r';
+    char array[]={'r','e','h','a','n'};
+#endif
     while(1)
     {
+#ifdef SPI_
+        for (int i = 0; i < 5; i++)
+        {
+            a = ssp1_exchange_byte(array[i]);
+            printf("Data send is %c and data received is %c.\n", array[i], a);
+        }
+        vTaskDelay(1000);
+#endif
         for(int i = 0; i < 16; i++)
         {
             for(int j = 1; j < 5; j++)
@@ -61,93 +69,241 @@ int main(void)
                 LE.set((5-j), CHECK_BIT(i,j-1));
             }
             LD.setNumber(i);
-            printf("Hello World 0x%X\n", i);
-            delay_ms(1000);
+             printf("(%c) Hello World 0x%X\n", c, i);
+            vTaskDelay(1000);
         }
     }
+}
+void drawline() {
+  for (int16_t i=0; i<display.width(); i+=4) {
+    display.drawLine(0, 0, i, display.height()-1, WHITE);
+    display.display();
+  }
+  for (int16_t i=0; i<display.height(); i+=4) {
+    display.drawLine(0, 0, display.width()-1, i, WHITE);
+    display.display();
+  }
+  vTaskDelay(250);
 
-    /**
-     * A few basic tasks for this bare-bone system :
-     *      1.  Terminal task provides gateway to interact with the board through UART terminal.
-     *      2.  Remote task allows you to use remote control to interact with the board.
-     *      3.  Wireless task responsible to receive, retry, and handle mesh network.
-     *
-     * Disable remote task if you are not using it.  Also, it needs SYS_CFG_ENABLE_TLM
-     * such that it can save remote control codes to non-volatile memory.  IR remote
-     * control codes can be learned by typing the "learn" terminal command.
-     */
+  display.clearDisplay();
+  for (int16_t i=0; i<display.width(); i+=4) {
+    display.drawLine(0, display.height()-1, i, 0, WHITE);
+    display.display();
+  }
+  for (int16_t i=display.height()-1; i>=0; i-=4) {
+    display.drawLine(0, display.height()-1, display.width()-1, i, WHITE);
+    display.display();
+  }
+  vTaskDelay(250);
+
+  display.clearDisplay();
+  for (int16_t i=display.width()-1; i>=0; i-=4) {
+    display.drawLine(display.width()-1, display.height()-1, i, 0, WHITE);
+    display.display();
+  }
+  for (int16_t i=display.height()-1; i>=0; i-=4) {
+    display.drawLine(display.width()-1, display.height()-1, 0, i, WHITE);
+    display.display();
+  }
+  vTaskDelay(250);
+
+  display.clearDisplay();
+  for (int16_t i=0; i<display.height(); i+=4) {
+    display.drawLine(display.width()-1, 0, 0, i, WHITE);
+    display.display();
+  }
+  for (int16_t i=0; i<display.width(); i+=4) {
+    display.drawLine(display.width()-1, 0, i, display.height()-1, WHITE);
+    display.display();
+  }
+  vTaskDelay(250);
+}
+
+void testdrawrect(void) {
+  for (int16_t i=0; i<display.height()/2; i+=2) {
+    display.drawRect(i, i, display.width()-2*i, display.height()-2*i, WHITE);
+    display.display();
+  }
+}
+
+void testfillrect(void) {
+  uint8_t color = 1;
+  for (int16_t i=0; i<display.height()/2; i+=3) {
+    // alternate colors
+    display.fillRect(i, i, display.width()-i*2, display.height()-i*2, color%2);
+    display.display();
+    color++;
+  }
+}
+
+void testdrawcircle(void) {
+  for (int16_t i=0; i<display.height(); i+=2) {
+    display.drawCircle(display.width()/2, display.height()/2, i, WHITE);
+    display.display();
+  }
+}
+
+void testdrawroundrect(void) {
+  for (int16_t i=0; i<display.height()/2-2; i+=2) {
+    display.drawRoundRect(i, i, display.width()-2*i, display.height()-2*i, display.height()/4, WHITE);
+    display.display();
+  }
+}
+
+void testfillroundrect(void) {
+  uint8_t color = WHITE;
+  for (int16_t i=0; i<display.height()/2-2; i+=2) {
+    display.fillRoundRect(i, i, display.width()-2*i, display.height()-2*i, display.height()/4, color);
+    if (color == WHITE) color = BLACK;
+    else color = WHITE;
+    display.display();
+  }
+}
+void testdrawtriangle(void) {
+  for (int16_t i=0; i<min(display.width(),display.height())/2; i+=5) {
+    display.drawTriangle(display.width()/2, display.height()/2-i,
+                     display.width()/2-i, display.height()/2+i,
+                     display.width()/2+i, display.height()/2+i, WHITE);
+    display.display();
+  }
+}
+
+void testfilltriangle(void) {
+  uint8_t color = WHITE;
+  for (int16_t i=min(display.width(),display.height())/2; i>0; i-=5) {
+    display.fillTriangle(display.width()/2, display.height()/2-i,
+                     display.width()/2-i, display.height()/2+i,
+                     display.width()/2+i, display.height()/2+i, WHITE);
+    if (color == WHITE) color = BLACK;
+    else color = WHITE;
+    display.display();
+  }
+}
+
+/*void testdrawchar(void) {
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+
+  for (uint8_t i=0; i < 168; i++) {
+    if (i == '\n') continue;
+    display.write(i);
+    if ((i > 0) && (i % 21 == 0))
+      display.println();
+  }
+  display.display();
+}*/
+
+void sh1106_task(void *pvParameters)
+{
+    char c = (char)((uint32_t)pvParameters);
+    display.init(SH1106_SWITCHCAPVCC);
+    printf("(%c) Display Begin.\n", c);
+
+
+    while(1){
+//        display.setAdafruitDisplay();
+        display.display();
+        printf("(%c) Adafruit Display.\n", c);
+        vTaskDelay(2000);
+        display.clearDisplay();
+        display.display();
+        printf("(%c) Clear Display.\n", c);
+        vTaskDelay(delay_time);
+
+        // draw a single pixel
+        display.drawPixel(10, 10, WHITE);
+        printf("(%c) After drawing a single pixel.\n", c);
+        vTaskDelay(1000);
+        // Show the display buffer on the hardware.
+        // NOTE: You _must_ call display after making any drawing commands
+        // to make them visible on the display hardware!
+        display.display();
+        printf("(%c) After display.display after pixel draw.\n", c);
+        vTaskDelay(delay_time);
+
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        // draw many lines
+        drawline();
+        display.display();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        // draw rectangles
+        testdrawrect();
+        display.display();
+        vTaskDelay(delay_time*2);
+        display.clearDisplay();
+
+        // draw multiple rectangles
+        testfillrect();
+        display.display();
+        vTaskDelay(delay_time*2);
+        display.clearDisplay();
+
+        // draw mulitple circles
+        testdrawcircle();
+        display.display();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        // draw a white circle, 10 pixel radius
+        display.fillCircle(display.width()/2, display.height()/2, 10, WHITE);
+        display.display();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        testdrawroundrect();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        testfillroundrect();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        testdrawtriangle();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+        testfilltriangle();
+        vTaskDelay(delay_time);
+        display.clearDisplay();
+
+/*        // draw the first ~12 characters in the font
+        testdrawchar();
+        display.display();
+        vTaskDelay(2000);
+        display.clearDisplay();
+
+        // draw scrolling text
+        testscrolltext();
+        vTaskDelay(2000);
+        display.clearDisplay();
+
+        // text display tests
+        display.setTextSize(1);
+        display.setTextColor(WHITE);
+        display.setCursor(0,0);
+        display.println("Hello, world!");
+        display.setTextColor(BLACK, WHITE); // 'inverted' text
+        display.println(3.141592);
+        display.setTextSize(2);
+        display.setTextColor(WHITE);
+        display.print("0x"); //display.println(0xDEADBEEF, HEX);
+        display.display();
+        vTaskDelay(2000);
+        display.clearDisplay();*/
+    }
+}
+
+int main(void)
+{
     scheduler_add_task(new terminalTask(PRIORITY_HIGH));
-
-    /* Consumes very little CPU, but need highest priority to handle mesh network ACKs */
-    scheduler_add_task(new wirelessTask(PRIORITY_CRITICAL));
-
-    /* Change "#if 0" to "#if 1" to run period tasks; @see period_callbacks.cpp */
-    #if 0
-    const bool run_1Khz = false;
-    scheduler_add_task(new periodicSchedulerTask(run_1Khz));
-    #endif
-
-    /* The task for the IR receiver to "learn" IR codes */
-    // scheduler_add_task(new remoteTask  (PRIORITY_LOW));
-
-    /* Your tasks should probably used PRIORITY_MEDIUM or PRIORITY_LOW because you want the terminal
-     * task to always be responsive so you can poke around in case something goes wrong.
-     */
-
-    /**
-     * This is a the board demonstration task that can be used to test the board.
-     * This also shows you how to send a wireless packets to other boards.
-     */
-    #if 0
-        scheduler_add_task(new example_io_demo());
-    #endif
-
-    /**
-     * Change "#if 0" to "#if 1" to enable examples.
-     * Try these examples one at a time.
-     */
-    #if 0
-        scheduler_add_task(new example_task());
-        scheduler_add_task(new example_alarm());
-        scheduler_add_task(new example_logger_qset());
-        scheduler_add_task(new example_nv_vars());
-    #endif
-
-    /**
-	 * Try the rx / tx tasks together to see how they queue data to each other.
-	 */
-    #if 0
-        scheduler_add_task(new queue_tx());
-        scheduler_add_task(new queue_rx());
-    #endif
-
-    /**
-     * Another example of shared handles and producer/consumer using a queue.
-     * In this example, producer will produce as fast as the consumer can consume.
-     */
-    #if 0
-        scheduler_add_task(new producer());
-        scheduler_add_task(new consumer());
-    #endif
-
-    /**
-     * If you have RN-XV on your board, you can connect to Wifi using this task.
-     * This does two things for us:
-     *   1.  The task allows us to perform HTTP web requests (@see wifiTask)
-     *   2.  Terminal task can accept commands from TCP/IP through Wifly module.
-     *
-     * To add terminal command channel, add this at terminal.cpp :: taskEntry() function:
-     * @code
-     *     // Assuming Wifly is on Uart3
-     *     addCommandChannel(Uart3::getInstance(), false);
-     * @endcode
-     */
-    #if 0
-        Uart3 &u3 = Uart3::getInstance();
-        u3.init(WIFI_BAUD_RATE, WIFI_RXQ_SIZE, WIFI_TXQ_SIZE);
-        scheduler_add_task(new wifiTask(Uart3::getInstance(), PRIORITY_LOW));
-    #endif
-
-    scheduler_start(); ///< This shouldn't return
+    xTaskCreate(vTaskCode, "vTassskCode", 512, ( void * ) 'A', tskIDLE_PRIORITY, NULL );
+    xTaskCreate(sh1106_task, "sh1106_task", 2048, (void*) 'B',tskIDLE_PRIORITY, NULL );
+    // Alias to vSchedulerStart();
+    scheduler_start();
     return -1;
 }
