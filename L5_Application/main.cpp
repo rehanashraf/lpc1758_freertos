@@ -25,6 +25,10 @@
  */
 #include "tasks.hpp"
 #include "examples/examples.hpp"
+#include <stdio.h>
+#include "utilities.h"
+#include "io.hpp"
+
 
 /**
  * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
@@ -40,8 +44,28 @@
  *        In either case, you should avoid using this bus or interfacing to external components because
  *        there is no semaphore configured for this bus and it should be used exclusively by nordic wireless.
  */
+
+inline bool CHECK_BIT(int var, int pos)
+{
+    return (bool)(var & (1 << pos));
+}
+
 int main(void)
 {
+    while(1)
+    {
+        for(int i = 0; i < 16; i++)
+        {
+            for(int j = 1; j < 5; j++)
+            {
+                LE.set((5-j), CHECK_BIT(i,j-1));
+            }
+            LD.setNumber(i);
+            printf("Hello World 0x%X\n", i);
+            delay_ms(1000);
+        }
+    }
+
     /**
      * A few basic tasks for this bare-bone system :
      *      1.  Terminal task provides gateway to interact with the board through UART terminal.
